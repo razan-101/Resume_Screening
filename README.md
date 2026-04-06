@@ -130,6 +130,40 @@ exit()
 
 ---
 
+## ⚠️ Additional Setup for spaCy (Important)
+
+This project uses **spaCy for advanced NLP-based PII removal**.
+
+After installing requirements, download the language model:
+
+```bash
+python -m spacy download en_core_web_sm
+```
+
+### 🔄 Optional Auto-Setup (Fallback)
+
+```python
+
+import spacy
+
+try:
+    nlp = spacy.load("en_core_web_sm")
+except:
+    import os
+    os.system("python -m spacy download en_core_web_sm")
+    nlp = spacy.load("en_core_web_sm")
+
+exit()
+```
+
+### 💡 Why this is needed
+
+* `pip install` installs only the spaCy library
+* Language models are separate downloads
+* Prevents runtime errors if model is missing
+
+---
+
 ## ▶️ Running the Application (VERY IMPORTANT)
 
 🚨 You MUST run backend and frontend separately
@@ -137,6 +171,8 @@ exit()
 ---
 
 ### 🖥️ Terminal 1 — Start Backend
+
+Run this command directly in terminal:
 
 ```bash
 python backend.py
