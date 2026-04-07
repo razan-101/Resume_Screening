@@ -4,6 +4,7 @@ import os
 import pickle
 import sqlite3
 import uuid
+import json
 from datetime import datetime, timezone
 
 import uvicorn
@@ -19,47 +20,104 @@ DB_PATH = os.path.join(BASE_DIR, "resume_screening.db")
 
 # ---------------- COMPANY STRUCTURE ----------------
 company_structure = {
-    "Tech Solutions Pvt Ltd":{
-        "roles":["Java Developer","Python Developer","Web Designing","DotNet Developer","Database","DevOps Engineer","Blockchain","SAP Developer"],
-        "recruiters":["Arjun – Backend Team","Rohan – Frontend Team","Vikram – DevOps Team"]
+    "Tech Solutions Pvt Ltd": {
+        "roles": [
+            "Java Developer", "Python Developer", "Web Designing",
+            "DotNet Developer", "Database", "DevOps Engineer",
+            "Blockchain", "SAP Developer"
+        ],
+        "recruiters": [
+            "Arjun – Backend Team",
+            "Rohan – Frontend Team",
+            "Vikram – DevOps Team"
+        ]
     },
-    "Data & Analytics Corp":{
-        "roles":["Data Science","Hadoop","ETL Developer","Business Analyst","Operations Manager","PMO"],
-        "recruiters":["Amit – Data Engineering","Neha – Analytics","Suresh – Program Management"]
+    "Data & Analytics Corp": {
+        "roles": [
+            "Data Science", "Hadoop", "ETL Developer",
+            "Business Analyst", "Operations Manager", "PMO"
+        ],
+        "recruiters": [
+            "Amit – Data Engineering",
+            "Neha – Analytics",
+            "Suresh – Program Management"
+        ]
     },
-    "Quality & Security Systems Ltd":{
-        "roles":["Testing","Automation Testing","Network Security Engineer"],
-        "recruiters":["Priya – QA","Karan – Automation","Rahul – Security"]
+    "Quality & Security Systems Ltd": {
+        "roles": [
+            "Testing", "Automation Testing", "Network Security Engineer"
+        ],
+        "recruiters": [
+            "Priya – QA",
+            "Karan – Automation",
+            "Rahul – Security"
+        ]
     },
-    "Enterprise & Sales Solutions":{
-        "roles":["Sales","HR","Advocate"],
-        "recruiters":["Ankit – Sales","Pooja – HR","Manish – Legal"]
+    "Enterprise & Sales Solutions": {
+        "roles": ["Sales", "HR", "Advocate"],
+        "recruiters": [
+            "Ankit – Sales",
+            "Pooja – HR",
+            "Manish – Legal"
+        ]
     },
-    "Engineering & Manufacturing Group":{
-        "roles":["Mechanical Engineer","Electrical Engineering","Civil Engineer"],
-        "recruiters":["Rajesh – Mechanical","Deepak – Electrical","Sneha – Civil"]
+    "Engineering & Manufacturing Group": {
+        "roles": [
+            "Mechanical Engineer", "Electrical Engineering", "Civil Engineer"
+        ],
+        "recruiters": [
+            "Rajesh – Mechanical",
+            "Deepak – Electrical",
+            "Sneha – Civil"
+        ]
     },
-    "Creative & Wellness Services":{
-        "roles":["Arts","Health and Fitness"],
-        "recruiters":["Meera – Creative","Kavya – Wellness","Ananya – Lifestyle"]
+    "Creative & Wellness Services": {
+        "roles": ["Arts", "Health and Fitness"],
+        "recruiters": [
+            "Meera – Creative",
+            "Kavya – Wellness",
+            "Ananya – Lifestyle"
+        ]
     }
 }
 
 # ---------------- CATEGORY MAPPING ----------------
 category_mapping = {
-    15:"Java Developer",23:"Testing",8:"DevOps Engineer",20:"Python Developer",
-    24:"Web Designing",12:"HR",13:"Hadoop",3:"Blockchain",10:"ETL Developer",
-    18:"Operations Manager",6:"Data Science",22:"Sales",16:"Mechanical Engineer",
-    1:"Arts",7:"Database",11:"Electrical Engineering",14:"Health and Fitness",
-    19:"PMO",4:"Business Analyst",9:"DotNet Developer",2:"Automation Testing",
-    17:"Network Security Engineer",21:"SAP Developer",5:"Civil Engineer",0:"Advocate"
+    15: "Java Developer",
+    23: "Testing",
+    8: "DevOps Engineer",
+    20: "Python Developer",
+    24: "Web Designing",
+    12: "HR",
+    13: "Hadoop",
+    3: "Blockchain",
+    10: "ETL Developer",
+    18: "Operations Manager",
+    6: "Data Science",
+    22: "Sales",
+    16: "Mechanical Engineer",
+    1: "Arts",
+    7: "Database",
+    11: "Electrical Engineering",
+    14: "Health and Fitness",
+    19: "PMO",
+    4: "Business Analyst",
+    9: "DotNet Developer",
+    2: "Automation Testing",
+    17: "Network Security Engineer",
+    21: "SAP Developer",
+    5: "Civil Engineer",
+    0: "Advocate"
 }
 
 # ---------------- LOAD MODEL ----------------
-with open(CLF_PATH,"rb") as f: clf = pickle.load(f)
-with open(TFIDF_PATH,"rb") as f: tfidf = pickle.load(f)
+with open(CLF_PATH, "rb") as f:
+    clf = pickle.load(f)
 
-# ---------------- APP ----------------
+with open(TFIDF_PATH, "rb") as f:
+    tfidf = pickle.load(f)
+
+# ---------------- FASTAPI ----------------
 app = FastAPI()
 
 app.add_middleware(
@@ -83,9 +141,9 @@ def startup():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tracking_id TEXT UNIQUE,
             tenant TEXT,
-            batch_name TEXT,
             predicted_role TEXT,
             eligible INTEGER,
+            process_status TEXT,
             assigned_recruiter TEXT,
             ranking_score REAL,
             test_status TEXT DEFAULT 'pending',
@@ -96,22 +154,16 @@ def startup():
         )
         """)
 
-# ---------------- TENANTS ----------------
-@app.get("/tenants")
-def get_tenants():
-    return {"tenants": company_structure}
-
 # ---------------- UPLOAD ----------------
 @app.post("/candidates/upload-resume")
 async def upload_resume(
     tenant: str = Form(...),
-    batch_name: str = Form(...),
     cleaned_text: str = Form(...),
     resume: UploadFile = File(...)
 ):
     features = tfidf.transform([cleaned_text])
     pred = int(clf.predict(features)[0])
-    predicted_role = category_mapping.get(pred,"Unknown")
+    predicted_role = category_mapping.get(pred, "Unknown")
 
     roles = company_structure[tenant]["roles"]
     eligible = predicted_role in roles
@@ -134,25 +186,24 @@ async def upload_resume(
 
         conn.execute("""
         INSERT INTO candidates (
-            tracking_id, tenant, batch_name, predicted_role,
-            eligible, assigned_recruiter, ranking_score,
+            tracking_id, tenant, predicted_role,
+            eligible, process_status,
+            assigned_recruiter, ranking_score,
             applied_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            tracking_id, tenant, batch_name, predicted_role,
-            int(eligible), recruiter, 0.0, now, now
+            tracking_id,
+            tenant,
+            predicted_role,
+            int(eligible),
+            "selected_for_interview" if eligible else "rejected",
+            recruiter,
+            0.0,
+            now,
+            now
         ))
 
-    return {
-        "tracking_id": tracking_id,
-        "predicted_role": predicted_role,
-        "ranking_score": 0.0,
-        "eligible": eligible,
-        "assigned_recruiter": recruiter,
-        "test_status":"pending",
-        "interview_status":"pending",
-        "final_status":"pending"
-    }
+    return {"tracking_id": tracking_id, "assigned_recruiter": recruiter}
 
 # ---------------- INTERVIEWER ----------------
 @app.get("/interviewers/candidates")
@@ -161,7 +212,7 @@ def get_candidates(tenant: str = Query(...), interviewer: str = Query(...)):
         rows = conn.execute("""
         SELECT * FROM candidates
         WHERE tenant=? AND assigned_recruiter=? AND eligible=1
-        """,(tenant,interviewer)).fetchall()
+        """, (tenant, interviewer)).fetchall()
 
     return [dict(r) for r in rows]
 
@@ -178,24 +229,10 @@ def update_status(
         UPDATE candidates
         SET test_status=?, interview_status=?, final_status=?
         WHERE tracking_id=?
-        """,(test_status,interview_status,final_status,tracking_id))
+        """, (test_status, interview_status, final_status, tracking_id))
 
-    return {"message":"updated"}
-
-# ---------------- CANDIDATE ----------------
-@app.get("/candidates/status/{tracking_id}")
-def candidate_status(tracking_id:str):
-    with get_conn() as conn:
-        row = conn.execute(
-            "SELECT * FROM candidates WHERE tracking_id=?",
-            (tracking_id,)
-        ).fetchone()
-
-    if not row:
-        raise HTTPException(status_code=404, detail="Not found")
-
-    return dict(row)
+    return {"message": "Status updated"}
 
 # ---------------- RUN ----------------
-if __name__=="__main__":
+if __name__ == "__main__":
     uvicorn.run("backend:app", host="0.0.0.0", port=8000)
