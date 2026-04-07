@@ -16,34 +16,34 @@ if "user" not in st.session_state:
 # ---------------- PASSWORDS ----------------
 passwords = {
     "Tech Solutions Pvt Ltd": {
-        "Arjun – Backend Team": "1234",
-        "Rohan – Frontend Team": "1234",
-        "Vikram – DevOps Team": "1234"
+        "Arjun – Backend Team": "arjun1234",
+        "Rohan – Frontend Team": "rohan1234",
+        "Vikram – DevOps Team": "vikram1234"
     },
     "Data & Analytics Corp": {
-        "Amit – Data Engineering": "1234",
-        "Neha – Analytics": "1234",
-        "Suresh – Program Management": "1234"
+        "Amit – Data Engineering": "amit1234",
+        "Neha – Analytics": "neha1234",
+        "Suresh – Program Management": "suresh1234"
     },
     "Quality & Security Systems Ltd": {
-        "Priya – QA": "1234",
-        "Karan – Automation": "1234",
-        "Rahul – Security": "1234"
+        "Priya – QA": "priya1234",
+        "Karan – Automation": "karan1234",
+        "Rahul – Security": "rahul1234"
     },
     "Enterprise & Sales Solutions": {
-        "Ankit – Sales": "1234",
-        "Pooja – HR": "1234",
-        "Manish – Legal": "1234"
+        "Ankit – Sales": "ankit1234",
+        "Pooja – HR": "pooja1234",
+        "Manish – Legal": "manish1234"
     },
     "Engineering & Manufacturing Group": {
-        "Rajesh – Mechanical": "1234",
-        "Deepak – Electrical": "1234",
-        "Sneha – Civil": "1234"
+        "Rajesh – Mechanical": "rajesh1234",
+        "Deepak – Electrical": "deepak1234",
+        "Sneha – Civil": "sneha1234"
     },
     "Creative & Wellness Services": {
-        "Meera – Creative": "1234",
-        "Kavya – Wellness": "1234",
-        "Ananya – Lifestyle": "1234"
+        "Meera – Creative": "meera1234",
+        "Kavya – Wellness": "kavya1234",
+        "Ananya – Lifestyle": "ananya1234"
     }
 }
 
