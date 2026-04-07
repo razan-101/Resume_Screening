@@ -8,7 +8,7 @@ import json
 from datetime import datetime, timezone
 
 import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -146,6 +146,7 @@ def get_conn():
 
 def init_db():
     with get_conn() as conn:
+        # MAIN TABLE
         conn.execute("""
         CREATE TABLE IF NOT EXISTS candidates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -156,11 +157,17 @@ def init_db():
             process_status TEXT,
             assigned_recruiter TEXT,
             ranking_score REAL,
+
+            test_status TEXT DEFAULT 'pending',
+            interview_status TEXT DEFAULT 'pending',
+            final_status TEXT DEFAULT 'pending',
+
             applied_at TEXT,
             updated_at TEXT
         )
         """)
 
+        # FINAL BATCH TABLE
         conn.execute("""
         CREATE TABLE IF NOT EXISTS final_batches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -189,16 +196,14 @@ def compute_similarity(text, roles):
         return 0.0
 
 
-# ---------------- APIs ----------------
+# ---------------- BASIC APIs ----------------
 @app.get("/")
 def root():
     return {"message": "Backend running"}
 
-
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
 
 @app.get("/tenants")
 def tenants():
@@ -218,12 +223,8 @@ async def upload_resume(
     if len(cleaned_text.strip()) < 10:
         raise HTTPException(400, "Weak resume")
 
-    try:
-        features = tfidf.transform([cleaned_text])
-        pred = int(clf.predict(features)[0])
-    except Exception as e:
-        raise HTTPException(500, f"Model error: {str(e)}")
-
+    features = tfidf.transform([cleaned_text])
+    pred = int(clf.predict(features)[0])
     predicted_role = category_mapping.get(pred, "Unknown")
 
     roles = company_structure[tenant]["roles"]
@@ -268,14 +269,44 @@ async def upload_resume(
     }
 
 
-# ---------------- INTERVIEWER ----------------
+# ---------------- FILTERED INTERVIEWER DATA ----------------
 @app.get("/interviewers/candidates")
-def get_candidates():
+def get_candidates(
+    tenant: str = Query(...),
+    interviewer: str = Query(...)
+):
     with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT * FROM candidates WHERE eligible=1 ORDER BY ranking_score DESC"
-        ).fetchall()
+        rows = conn.execute("""
+        SELECT * FROM candidates
+        WHERE tenant=? AND assigned_recruiter=? AND eligible=1
+        ORDER BY ranking_score DESC
+        """, (tenant, interviewer)).fetchall()
+
     return [dict(r) for r in rows]
+
+
+# ---------------- UPDATE STATUS ----------------
+@app.put("/interview/update-status")
+def update_status(
+    tracking_id: str = Form(...),
+    test_status: str = Form(...),
+    interview_status: str = Form(...),
+    final_status: str = Form(...)
+):
+    with get_conn() as conn:
+        conn.execute("""
+        UPDATE candidates
+        SET test_status=?, interview_status=?, final_status=?, updated_at=?
+        WHERE tracking_id=?
+        """, (
+            test_status,
+            interview_status,
+            final_status,
+            datetime.now(timezone.utc).isoformat(),
+            tracking_id
+        ))
+
+    return {"message": "Status updated"}
 
 
 # ---------------- FINAL BATCH ----------------
@@ -285,10 +316,7 @@ def save_batch(
     tenant: str = Form(...),
     data: str = Form(...)
 ):
-    try:
-        candidates = json.loads(data)
-    except:
-        raise HTTPException(400, "Invalid JSON")
+    candidates = json.loads(data)
 
     with get_conn() as conn:
         for c in candidates:
@@ -301,10 +329,10 @@ def save_batch(
             """, (
                 batch_name,
                 tenant,
-                c.get("tracking_id", "hidden"),
-                c.get("predicted_role"),
-                c.get("ranking_score"),
-                c.get("assigned_recruiter"),
+                c["tracking_id"],
+                c["predicted_role"],
+                c["ranking_score"],
+                c["assigned_recruiter"],
                 datetime.now(timezone.utc).isoformat()
             ))
 
@@ -329,4 +357,4 @@ def status(tid: str):
 # ---------------- RUN ----------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("backend:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("backend:app", host="0.0.0.0", port=port)

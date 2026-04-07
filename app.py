@@ -6,9 +6,55 @@ BACKEND_URL = "https://resume-backend-i634.onrender.com"
 
 st.set_page_config(page_title="Resume Screening", layout="wide")
 
-st.title("🚀 Privacy-Aware Resume Screening System")
+# ---------------- SESSION ----------------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "user" not in st.session_state:
+    st.session_state.user = None
+if "tenant" not in st.session_state:
+    st.session_state.tenant = None
 
-tabs = st.tabs(["📂 Recruiter", "👨‍💼 Interviewer", "🧑 Candidate"])
+# ---------------- PASSWORDS ----------------
+interviewer_passwords = {
+    "Arjun – Backend Team": "arjun123",
+    "Rohan – Frontend Team": "rohan123",
+    "Vikram – DevOps Team": "vikram123",
+    "Amit – Data Engineering": "amit123",
+    "Neha – Analytics": "neha123",
+    "Suresh – Program Management": "suresh123",
+    "Priya – QA": "priya123",
+    "Karan – Automation": "karan123",
+    "Rahul – Security": "rahul123",
+    "Ankit – Sales": "ankit123",
+    "Pooja – HR": "pooja123",
+    "Manish – Legal": "manish123",
+    "Rajesh – Mechanical": "rajesh123",
+    "Deepak – Electrical": "deepak123",
+    "Sneha – Civil": "sneha123",
+    "Meera – Creative": "meera123",
+    "Kavya – Wellness": "kavya123",
+    "Ananya – Lifestyle": "ananya123",
+}
+
+# ---------------- LOGIN ----------------
+def login_page():
+    st.title("🔐 Interviewer Login")
+
+    tenants_data = requests.get(f"{BACKEND_URL}/tenants").json()["tenants"]
+
+    tenant = st.selectbox("Select Company", list(tenants_data.keys()))
+    interviewer = st.selectbox("Select Your Name", tenants_data[tenant]["recruiters"])
+    pwd = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+        if interviewer in interviewer_passwords and pwd == interviewer_passwords[interviewer]:
+            st.session_state.logged_in = True
+            st.session_state.user = interviewer
+            st.session_state.tenant = tenant
+            st.success("Login successful")
+            st.rerun()
+        else:
+            st.error("Invalid credentials")
 
 # ---------------- UTIL ----------------
 def extract_text(file):
@@ -33,7 +79,12 @@ def extract_pii(text):
 def generate_hash(name, email, phone):
     return hashlib.sha256(f"{name}-{email}-{phone}".encode()).hexdigest()
 
-# ---------------- RECRUITER ----------------
+# ---------------- MAIN ----------------
+st.title("🚀 Privacy-Aware Resume Screening System")
+
+tabs = st.tabs(["📂 Recruiter", "👨‍💼 Interviewer", "🧑 Candidate"])
+
+# ================= RECRUITER =================
 with tabs[0]:
     st.header("📂 Batch Resume Processing")
 
@@ -53,7 +104,6 @@ with tabs[0]:
 
         st.subheader("🔍 Duplicate Detection")
 
-        # -------- EXACT DUPLICATES --------
         for f in files:
             text = extract_text(f)
             name, email, phone = extract_pii(text)
@@ -68,7 +118,6 @@ with tabs[0]:
             raw_files.append(f)
             hashes.append(h)
 
-        # -------- FUZZY DUPLICATES --------
         vectorizer = TfidfVectorizer()
         tfidf = vectorizer.fit_transform(texts)
         sim = cosine_similarity(tfidf)
@@ -85,20 +134,12 @@ with tabs[0]:
                     removed.add(j)
                     st.warning(f"⚠️ Fuzzy duplicate removed → {raw_files[j].name}")
 
-        # -------- PROCESS --------
         results = []
-
-        st.subheader("⚙️ Processing Resumes")
 
         for i in keep:
             f = raw_files[i]
             uid = hashes[i][:8]
-
             clean = clean_text(texts[i])
-
-            if len(clean) < 10:
-                st.warning(f"⚠️ Weak resume skipped → {f.name}")
-                continue
 
             res = requests.post(
                 f"{BACKEND_URL}/candidates/upload-resume",
@@ -113,66 +154,70 @@ with tabs[0]:
             data = res.json()
 
             results.append({
+                "tracking_id": data["tracking_id"],
                 "UID": uid,
-                "Role": data.get("predicted_role"),
-                "Score": data.get("ranking_score"),
-                "Eligible": data.get("eligible"),
-                "Recruiter": data.get("assigned_recruiter")
+                "Role": data["predicted_role"],
+                "Score": data["ranking_score"],
+                "Eligible": data["eligible"],
+                "Recruiter": data["assigned_recruiter"]
             })
 
         if results:
-            df = pd.DataFrame(results).sort_values("Score", ascending=False).reset_index(drop=True)
-            df["Rank"] = df.index + 1
-            df["Eligible"] = df["Eligible"].apply(lambda x: "✅ Yes" if x else "❌ No")
+            df = pd.DataFrame(results).sort_values("Score", ascending=False)
+            df["Rank"] = range(1, len(df)+1)
 
-            df = df[["Rank","UID","Role","Score","Eligible","Recruiter"]]
+            st.dataframe(df[["Rank","UID","Role","Score","Eligible","Recruiter"]])
 
-            st.subheader("📊 Final Ranked Candidates")
-            st.dataframe(df, use_container_width=True)
-
-            st.download_button("⬇️ Download CSV", df.to_csv(index=False), "results.csv")
-
-            # -------- FINAL BATCH --------
-            st.subheader("📦 Finalize Batch")
-
-            batch_name = st.text_input("Batch Name")
-
-            if st.button("🚀 Send Final Eligible Candidates"):
-                eligible = [r for r in results if r["Eligible"]]
-
-                payload = []
-                for r in eligible:
-                    payload.append({
-                        "tracking_id": "hidden",
-                        "predicted_role": r["Role"],
-                        "ranking_score": r["Score"],
-                        "assigned_recruiter": r["Recruiter"]
-                    })
-
-                requests.post(
-                    f"{BACKEND_URL}/final-batch",
-                    data={"batch_name": batch_name, "tenant": tenant, "data": json.dumps(payload)}
-                )
-
-                st.success("✅ Batch Saved Successfully")
-
-# ---------------- INTERVIEWER ----------------
+# ================= INTERVIEWER =================
 with tabs[1]:
-    st.header("👨‍💼 Interviewer Dashboard")
 
-    res = requests.get(f"{BACKEND_URL}/interviewers/candidates")
+    if not st.session_state.logged_in:
+        login_page()
+    else:
+        st.header(f"👨‍💼 {st.session_state.user}")
 
-    if res.status_code == 200:
+        if st.button("Logout"):
+            st.session_state.logged_in = False
+            st.rerun()
+
+        res = requests.get(
+            f"{BACKEND_URL}/interviewers/candidates",
+            params={
+                "tenant": st.session_state.tenant,
+                "interviewer": st.session_state.user
+            }
+        )
+
         data = res.json()
 
         if not data:
-            st.info("No candidates yet")
+            st.info("No candidates assigned")
         else:
-            st.dataframe(pd.DataFrame(data), use_container_width=True)
-    else:
-        st.error("Backend error")
+            for c in data:
+                st.subheader(c["tracking_id"])
 
-# ---------------- CANDIDATE ----------------
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    test = st.selectbox("Test", ["pending","completed"], key=f"t{c['tracking_id']}")
+                with col2:
+                    interview = st.selectbox("Interview", ["pending","completed"], key=f"i{c['tracking_id']}")
+                with col3:
+                    final = st.selectbox("Final", ["pending","selected","rejected"], key=f"f{c['tracking_id']}")
+
+                if st.button(f"Update {c['tracking_id']}"):
+                    requests.put(
+                        f"{BACKEND_URL}/interview/update-status",
+                        data={
+                            "tracking_id": c["tracking_id"],
+                            "test_status": test,
+                            "interview_status": interview,
+                            "final_status": final
+                        }
+                    )
+                    st.success("Updated")
+
+# ================= CANDIDATE =================
 with tabs[2]:
     st.header("🧑 Candidate Tracking")
 
@@ -182,6 +227,10 @@ with tabs[2]:
         res = requests.get(f"{BACKEND_URL}/candidates/status/{tid}")
 
         if res.status_code == 200:
-            st.json(res.json())
+            d = res.json()
+            st.write("Role:", d.get("predicted_role"))
+            st.write("Test:", d.get("test_status"))
+            st.write("Interview:", d.get("interview_status"))
+            st.write("Final:", d.get("final_status"))
         else:
-            st.error("Candidate not found")
+            st.error("Not found")
