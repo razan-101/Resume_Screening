@@ -2,7 +2,7 @@ import io, re, hashlib, json, requests, streamlit as st, pdfplumber, docx, panda
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-BACKEND_URL = "http://127.0.0.1:8000"
+BACKEND_URL = "https://resume-backend-i634.onrender.com"
 
 st.set_page_config(page_title="Resume Screening", layout="wide")
 
