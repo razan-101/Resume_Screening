@@ -1,61 +1,52 @@
-import io
-import re
-import hashlib
-import json
-import requests
-import streamlit as st
-import pdfplumber
-import docx
-import pandas as pd
-
+import io,re,hashlib,json,requests,streamlit as st,pdfplumber,docx,pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-BACKEND_URL = "https://resume-backend-i634.onrender.com"
+BACKEND_URL="https://resume-backend-i634.onrender.com"
 
-st.set_page_config(page_title="Resume Screening", layout="wide")
-
-# ---------------- SESSION ----------------
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-if "user" not in st.session_state:
-    st.session_state.user = None
-if "tenant" not in st.session_state:
-    st.session_state.tenant = None
+st.set_page_config(page_title="Resume AI System",layout="wide")
 
 # ---------------- PASSWORDS ----------------
 passwords = {
-    "Tech Solutions Pvt Ltd": {
-        "Arjun – Backend Team": "arjun1234",
-        "Rohan – Frontend Team": "rohan1234",
-        "Vikram – DevOps Team": "vikram1234"
+    "Tech Solutions Pvt Ltd":{
+        "Arjun – Backend Team":"arjun1234",
+        "Rohan – Frontend Team":"rohan1234",
+        "Vikram – DevOps Team":"vikram1234"
     },
-    "Data & Analytics Corp": {
-        "Amit – Data Engineering": "amit1234",
-        "Neha – Analytics": "neha1234",
-        "Suresh – Program Management": "suresh1234"
+    "Data & Analytics Corp":{
+        "Amit – Data Engineering":"amit1234",
+        "Neha – Analytics":"neha1234",
+        "Suresh – Program Management":"suresh1234"
     },
-    "Quality & Security Systems Ltd": {
-        "Priya – QA": "priya1234",
-        "Karan – Automation": "karan1234",
-        "Rahul – Security": "rahul1234"
+    "Quality & Security Systems Ltd":{
+        "Priya – QA":"priya1234",
+        "Karan – Automation":"karan1234",
+        "Rahul – Security":"rahul1234"
     },
-    "Enterprise & Sales Solutions": {
-        "Ankit – Sales": "ankit1234",
-        "Pooja – HR": "pooja1234",
-        "Manish – Legal": "manish1234"
+    "Enterprise & Sales Solutions":{
+        "Ankit – Sales":"ankit1234",
+        "Pooja – HR":"pooja1234",
+        "Manish – Legal":"manish1234"
     },
-    "Engineering & Manufacturing Group": {
-        "Rajesh – Mechanical": "rajesh1234",
-        "Deepak – Electrical": "deepak1234",
-        "Sneha – Civil": "sneha1234"
+    "Engineering & Manufacturing Group":{
+        "Rajesh – Mechanical":"rajesh1234",
+        "Deepak – Electrical":"deepak1234",
+        "Sneha – Civil":"sneha1234"
     },
-    "Creative & Wellness Services": {
-        "Meera – Creative": "meera1234",
-        "Kavya – Wellness": "kavya1234",
-        "Ananya – Lifestyle": "ananya1234"
+    "Creative & Wellness Services":{
+        "Meera – Creative":"meera1234",
+        "Kavya – Wellness":"kavya1234",
+        "Ananya – Lifestyle":"ananya1234"
     }
 }
+
+# ---------------- SESSION ----------------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in=False
+if "user" not in st.session_state:
+    st.session_state.user=None
+if "tenant" not in st.session_state:
+    st.session_state.tenant=None
 
 # ---------------- UTIL ----------------
 def extract_text(file):
@@ -65,236 +56,180 @@ def extract_text(file):
     elif file.name.endswith(".docx"):
         doc = docx.Document(io.BytesIO(file.getvalue()))
         return "\n".join(p.text for p in doc.paragraphs)
-    else:
-        return file.getvalue().decode(errors="ignore")
-
+    return file.getvalue().decode(errors="ignore")
 
 def clean_text(text):
-    return re.sub(r"[^a-zA-Z ]", " ", text).lower()
+    return re.sub(r"[^a-zA-Z ]"," ",text).lower()
 
-
-def extract_pii(text):
-    email = re.findall(r"\S+@\S+", text)
-    phone = re.findall(r"\+?\d[\d -]{8,12}\d", text)
-    name = text.split("\n")[0]
-    return name, email[0] if email else "", phone[0] if phone else ""
-
-
-def generate_hash(name, email, phone):
-    return hashlib.sha256(f"{name}-{email}-{phone}".encode()).hexdigest()
-
+def hash_id(text):
+    return hashlib.md5(text.encode()).hexdigest()
 
 # ---------------- UI ----------------
-st.title("🚀 Privacy-Aware Resume Screening System")
-tabs = st.tabs(["📂 Recruiter", "👨‍💼 Interviewer", "🧑 Candidate"])
+st.title("🚀 AI Resume Screening System")
+
+tabs=st.tabs(["📂 Recruiter","👨‍💼 Interviewer","🧑 Candidate"])
 
 # ================= RECRUITER =================
 with tabs[0]:
-    st.header("📂 Batch Resume Processing")
 
-    tenants = list(requests.get(f"{BACKEND_URL}/tenants").json()["tenants"].keys())
-    tenant = st.selectbox("🏢 Select Company", tenants)
+    tenants=list(requests.get(f"{BACKEND_URL}/tenants").json()["tenants"].keys())
 
-    files = st.file_uploader("📄 Upload Resumes", accept_multiple_files=True)
+    tenant=st.selectbox("🏢 Company",tenants,key="recruiter_company")
+
+    files=st.file_uploader("📄 Upload Resumes",accept_multiple_files=True)
 
     if st.button("⚡ Process Batch"):
 
-        texts, raw_files, hashes = [], [], []
-        seen = set()
+        progress=st.progress(0)
+        status=st.empty()
 
-        for f in files:
-            text = extract_text(f)
-            name, email, phone = extract_pii(text)
-            h = generate_hash(name, email, phone)
+        texts=[]
+        for i,f in enumerate(files):
+            status.text(f"Processing {f.name}...")
+            progress.progress((i+1)/len(files))
+            texts.append(clean_text(extract_text(f)))
 
-            if h in seen:
-                st.error(f"❌ Exact duplicate → {f.name}")
-                continue
+        tfidf=TfidfVectorizer().fit_transform(texts)
+        cos=cosine_similarity(tfidf)
 
-            seen.add(h)
-            texts.append(text)
-            raw_files.append(f)
-            hashes.append(h)
-
-        if texts:
-            tfidf_matrix = TfidfVectorizer().fit_transform(texts)
-            sim = cosine_similarity(tfidf_matrix)
-        else:
-            sim = []
-
-        keep = []
-        removed = set()
-
-        for i in range(len(texts)):
-            if i in removed:
-                continue
-
-            keep.append(i)
-
-            for j in range(i + 1, len(texts)):
-                if sim[i][j] > 0.85:
-                    removed.add(j)
-                    st.warning(f"⚠️ Fuzzy duplicate → {raw_files[j].name}")
-
-        results = []
-
-        for i in keep:
-            f = raw_files[i]
-            uid = hashes[i][:8]
-            clean = clean_text(texts[i])
-
-            res = requests.post(
-                f"{BACKEND_URL}/candidates/upload-resume",
-                data={"tenant": tenant, "cleaned_text": clean},
-                files={"resume": (f.name, f.getvalue())}
-            )
-
-            if res.status_code != 200:
-                st.error(f"Backend error → {f.name}")
-                continue
-
-            data = res.json()
+        results=[]
+        for i,t in enumerate(texts):
+            jac=len(set(t.split()))/len(t.split())
+            score=(cos[i].mean()+jac)/2
 
             results.append({
-                "tracking_id": data.get("tracking_id"),
-                "UID": uid,
-                "Role": data.get("predicted_role"),
-                "Score": data.get("ranking_score"),
-                "Eligible": data.get("eligible"),
-                "Recruiter": data.get("assigned_recruiter")
+                "tracking_id":hash_id(t)[:8],
+                "Role":"Predicted",
+                "Score":round(score,3),
+                "Eligible":score>0.2,
+                "Recruiter":"Auto"
             })
 
-        if results:
-            df = pd.DataFrame(results).sort_values("Score", ascending=False).reset_index(drop=True)
-            df["Rank"] = df.index + 1
+        df=pd.DataFrame(results).sort_values("Score",ascending=False)
+        df["Rank"]=range(1,len(df)+1)
 
-            df_display = df.copy()
-            df_display["Eligible"] = df_display["Eligible"].apply(lambda x: "✅ Yes" if x else "❌ No")
+        st.success("✅ Processing Completed")
+        st.dataframe(df,use_container_width=True)
 
-            st.dataframe(df_display, use_container_width=True)
+        if st.button("🚀 Send Only Eligible to DB"):
+            selected=df[df["Eligible"]==True].to_dict("records")
 
-            batch_name = st.text_input("Batch Name")
+            requests.post(
+                f"{BACKEND_URL}/save-final",
+                data={"data":str(selected),"tenant":tenant}
+            )
 
-            if st.button("🚀 Send Final Eligible Candidates"):
-                eligible_rows = [r for r in results if r.get("Eligible") is True]
-
-                if not eligible_rows:
-                    st.warning("No eligible candidates to send")
-                else:
-                    payload = [
-                        {
-                            "tracking_id": r["tracking_id"],
-                            "predicted_role": r["Role"],
-                            "ranking_score": r["Score"],
-                            "assigned_recruiter": r["Recruiter"]
-                        }
-                        for r in eligible_rows
-                    ]
-
-                    res = requests.post(
-                        f"{BACKEND_URL}/final-batch",
-                        data={
-                            "batch_name": batch_name,
-                            "tenant": tenant,
-                            "data": json.dumps(payload)
-                        }
-                    )
-
-                    if res.status_code == 200:
-                        st.success("✅ Batch saved successfully")
-                    else:
-                        st.error("❌ Failed to save batch")
+            st.success("🎯 Eligible Candidates Sent to DB")
 
 # ================= INTERVIEWER =================
 with tabs[1]:
-    st.header("👨‍💼 Interviewer Dashboard")
+
+    st.subheader("👨‍💼 Interview Dashboard")
 
     if not st.session_state.logged_in:
-        tenant = st.selectbox("Company", list(passwords.keys()))
-        interviewer = st.selectbox("Interviewer", list(passwords[tenant].keys()))
-        pwd = st.text_input("Password", type="password")
+
+        tenant=st.selectbox("🏢 Company",list(passwords.keys()),key="login_company")
+        user=st.selectbox("👤 Interviewer",list(passwords[tenant].keys()),key="login_user")
+        pwd=st.text_input("🔑 Password",type="password")
 
         if st.button("Login"):
-            if pwd == passwords[tenant][interviewer]:
-                st.session_state.logged_in = True
-                st.session_state.user = interviewer
-                st.session_state.tenant = tenant
+            if pwd==passwords[tenant][user]:
+                st.session_state.logged_in=True
+                st.session_state.user=user
+                st.session_state.tenant=tenant
+                st.success("Login successful")
                 st.rerun()
             else:
                 st.error("Wrong password")
+
     else:
         st.success(f"Logged in as {st.session_state.user}")
 
         if st.button("Logout"):
-            st.session_state.logged_in = False
+            st.session_state.logged_in=False
             st.rerun()
 
-        res = requests.get(
+        data=requests.get(
             f"{BACKEND_URL}/interviewers/candidates",
             params={
-                "tenant": st.session_state.tenant,
-                "interviewer": st.session_state.user
+                "tenant":st.session_state.tenant,
+                "interviewer":st.session_state.user
             }
-        )
+        ).json()
 
-        if res.status_code == 200:
-            data = res.json()
+        for c in data:
+            with st.container():
+                st.markdown(f"### 🧑 Candidate ID: `{c['tracking_id']}`")
+                st.markdown("---")
 
-            if data:
-                df = pd.DataFrame(data)
-                st.dataframe(df, use_container_width=True)
+                col1,col2,col3=st.columns(3)
+                col1.metric("Test",c["test_status"])
+                col2.metric("Interview",c["interview_status"])
+                col3.metric("Final",c["final_status"])
 
-                for c in data:
-                    st.write(f"Candidate: {c['tracking_id']}")
-
-                    if st.button("Test Done", key=f"t{c['tracking_id']}"):
-                        requests.put(
-                            f"{BACKEND_URL}/interview/update-status",
-                            data={
-                                "tracking_id": c["tracking_id"],
-                                "test_status": "done",
-                                "interview_status": c["interview_status"],
-                                "final_status": c["final_status"]
-                            }
-                        )
+                if c["test_status"]=="pending":
+                    if st.button("🧪 Mark Test Done",key=c["tracking_id"]+"t"):
+                        requests.put(f"{BACKEND_URL}/update-status",
+                            data={"tracking_id":c["tracking_id"],"field":"test_status","value":"done"})
                         st.rerun()
 
-                    if st.button("Select", key=f"s{c['tracking_id']}"):
-                        requests.put(
-                            f"{BACKEND_URL}/interview/update-status",
-                            data={
-                                "tracking_id": c["tracking_id"],
-                                "test_status": c["test_status"],
-                                "interview_status": "done",
-                                "final_status": "selected"
-                            }
-                        )
+                elif c["interview_started"]==0:
+                    if st.button("▶ Start Interview",key=c["tracking_id"]+"start"):
+                        requests.put(f"{BACKEND_URL}/update-status",
+                            data={"tracking_id":c["tracking_id"],"field":"interview_started","value":"1"})
                         st.rerun()
 
-                    if st.button("Reject", key=f"r{c['tracking_id']}"):
-                        requests.put(
-                            f"{BACKEND_URL}/interview/update-status",
-                            data={
-                                "tracking_id": c["tracking_id"],
-                                "test_status": c["test_status"],
-                                "interview_status": "done",
-                                "final_status": "rejected"
-                            }
-                        )
+                elif c["interview_status"]=="pending":
+                    st.info("🎤 Interview in Progress")
+                    if st.button("⏹ End Interview",key=c["tracking_id"]+"end"):
+                        requests.put(f"{BACKEND_URL}/update-status",
+                            data={"tracking_id":c["tracking_id"],"field":"interview_status","value":"done"})
                         st.rerun()
-            else:
-                st.warning("No candidates")
+
+                else:
+                    colA,colB=st.columns(2)
+                    if colA.button("✅ Select",key=c["tracking_id"]+"s"):
+                        requests.put(f"{BACKEND_URL}/update-status",
+                            data={"tracking_id":c["tracking_id"],"field":"final_status","value":"selected"})
+                        st.rerun()
+                    if colB.button("❌ Reject",key=c["tracking_id"]+"r"):
+                        requests.put(f"{BACKEND_URL}/update-status",
+                            data={"tracking_id":c["tracking_id"],"field":"final_status","value":"rejected"})
+                        st.rerun()
+
+                st.markdown("------")
 
 # ================= CANDIDATE =================
 with tabs[2]:
-    st.header("🧑 Candidate Tracking")
 
-    tid = st.text_input("Tracking ID")
+    st.subheader("🧑 Candidate Tracking")
 
-    if st.button("Check"):
-        res = requests.get(f"{BACKEND_URL}/candidates/status/{tid}")
+    tid=st.text_input("🔍 Enter Tracking ID")
 
-        if res.status_code == 200:
-            st.json(res.json())
+    if st.button("Track Status"):
+        res=requests.get(f"{BACKEND_URL}/status/{tid}")
+
+        if res.status_code==200:
+            d=res.json()
+
+            progress = (
+                1 if d["final_status"]!="pending" else
+                0.66 if d["interview_status"]=="done" else
+                0.33 if d["test_status"]=="done" else 0.1
+            )
+
+            st.progress(progress)
+
+            st.markdown("### 📊 Status Overview")
+            st.success(f"🧪 Test: {d['test_status']}")
+            st.info(f"🎤 Interview: {d['interview_status']}")
+
+            if d["final_status"]=="selected":
+                st.success("🎉 FINAL RESULT: SELECTED")
+            elif d["final_status"]=="rejected":
+                st.error("❌ FINAL RESULT: REJECTED")
+            else:
+                st.warning("⏳ FINAL STATUS: IN PROCESS")
+
         else:
-            st.error("Not found")
+            st.error("Tracking ID not found")

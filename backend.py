@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-import os
-import pickle
-import sqlite3
-import uuid
-import json
+import os, pickle, sqlite3, uuid
 from datetime import datetime, timezone
 
 import uvicorn
@@ -20,104 +16,46 @@ DB_PATH = os.path.join(BASE_DIR, "resume_screening.db")
 
 # ---------------- COMPANY STRUCTURE ----------------
 company_structure = {
-    "Tech Solutions Pvt Ltd": {
-        "roles": [
-            "Java Developer", "Python Developer", "Web Designing",
-            "DotNet Developer", "Database", "DevOps Engineer",
-            "Blockchain", "SAP Developer"
-        ],
-        "recruiters": [
-            "Arjun – Backend Team",
-            "Rohan – Frontend Team",
-            "Vikram – DevOps Team"
-        ]
+    "Tech Solutions Pvt Ltd":{
+        "roles":["Java Developer","Python Developer","Web Designing","DotNet Developer","Database","DevOps Engineer","Blockchain","SAP Developer"],
+        "recruiters":["Arjun – Backend Team","Rohan – Frontend Team","Vikram – DevOps Team"]
     },
-    "Data & Analytics Corp": {
-        "roles": [
-            "Data Science", "Hadoop", "ETL Developer",
-            "Business Analyst", "Operations Manager", "PMO"
-        ],
-        "recruiters": [
-            "Amit – Data Engineering",
-            "Neha – Analytics",
-            "Suresh – Program Management"
-        ]
+    "Data & Analytics Corp":{
+        "roles":["Data Science","Hadoop","ETL Developer","Business Analyst","Operations Manager","PMO"],
+        "recruiters":["Amit – Data Engineering","Neha – Analytics","Suresh – Program Management"]
     },
-    "Quality & Security Systems Ltd": {
-        "roles": [
-            "Testing", "Automation Testing", "Network Security Engineer"
-        ],
-        "recruiters": [
-            "Priya – QA",
-            "Karan – Automation",
-            "Rahul – Security"
-        ]
+    "Quality & Security Systems Ltd":{
+        "roles":["Testing","Automation Testing","Network Security Engineer"],
+        "recruiters":["Priya – QA","Karan – Automation","Rahul – Security"]
     },
-    "Enterprise & Sales Solutions": {
-        "roles": ["Sales", "HR", "Advocate"],
-        "recruiters": [
-            "Ankit – Sales",
-            "Pooja – HR",
-            "Manish – Legal"
-        ]
+    "Enterprise & Sales Solutions":{
+        "roles":["Sales","HR","Advocate"],
+        "recruiters":["Ankit – Sales","Pooja – HR","Manish – Legal"]
     },
-    "Engineering & Manufacturing Group": {
-        "roles": [
-            "Mechanical Engineer", "Electrical Engineering", "Civil Engineer"
-        ],
-        "recruiters": [
-            "Rajesh – Mechanical",
-            "Deepak – Electrical",
-            "Sneha – Civil"
-        ]
+    "Engineering & Manufacturing Group":{
+        "roles":["Mechanical Engineer","Electrical Engineering","Civil Engineer"],
+        "recruiters":["Rajesh – Mechanical","Deepak – Electrical","Sneha – Civil"]
     },
-    "Creative & Wellness Services": {
-        "roles": ["Arts", "Health and Fitness"],
-        "recruiters": [
-            "Meera – Creative",
-            "Kavya – Wellness",
-            "Ananya – Lifestyle"
-        ]
+    "Creative & Wellness Services":{
+        "roles":["Arts","Health and Fitness"],
+        "recruiters":["Meera – Creative","Kavya – Wellness","Ananya – Lifestyle"]
     }
 }
 
-# ---------------- CATEGORY MAPPING ----------------
+# ---------------- CATEGORY ----------------
 category_mapping = {
-    15: "Java Developer",
-    23: "Testing",
-    8: "DevOps Engineer",
-    20: "Python Developer",
-    24: "Web Designing",
-    12: "HR",
-    13: "Hadoop",
-    3: "Blockchain",
-    10: "ETL Developer",
-    18: "Operations Manager",
-    6: "Data Science",
-    22: "Sales",
-    16: "Mechanical Engineer",
-    1: "Arts",
-    7: "Database",
-    11: "Electrical Engineering",
-    14: "Health and Fitness",
-    19: "PMO",
-    4: "Business Analyst",
-    9: "DotNet Developer",
-    2: "Automation Testing",
-    17: "Network Security Engineer",
-    21: "SAP Developer",
-    5: "Civil Engineer",
-    0: "Advocate"
+    15:"Java Developer",23:"Testing",8:"DevOps Engineer",20:"Python Developer",
+    24:"Web Designing",12:"HR",13:"Hadoop",3:"Blockchain",10:"ETL Developer",
+    18:"Operations Manager",6:"Data Science",22:"Sales",16:"Mechanical Engineer",
+    1:"Arts",7:"Database",11:"Electrical Engineering",14:"Health and Fitness",
+    19:"PMO",4:"Business Analyst",9:"DotNet Developer",2:"Automation Testing",
+    17:"Network Security Engineer",21:"SAP Developer",5:"Civil Engineer",0:"Advocate"
 }
 
 # ---------------- LOAD MODEL ----------------
-with open(CLF_PATH, "rb") as f:
-    clf = pickle.load(f)
+with open(CLF_PATH,"rb") as f: clf=pickle.load(f)
+with open(TFIDF_PATH,"rb") as f: tfidf=pickle.load(f)
 
-with open(TFIDF_PATH, "rb") as f:
-    tfidf = pickle.load(f)
-
-# ---------------- FASTAPI ----------------
 app = FastAPI()
 
 app.add_middleware(
@@ -129,8 +67,8 @@ app.add_middleware(
 
 # ---------------- DB ----------------
 def get_conn():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn=sqlite3.connect(DB_PATH)
+    conn.row_factory=sqlite3.Row
     return conn
 
 @app.on_event("startup")
@@ -143,96 +81,66 @@ def startup():
             tenant TEXT,
             predicted_role TEXT,
             eligible INTEGER,
-            process_status TEXT,
             assigned_recruiter TEXT,
-            ranking_score REAL,
+            hybrid_score REAL,
+            rank INTEGER,
             test_status TEXT DEFAULT 'pending',
             interview_status TEXT DEFAULT 'pending',
             final_status TEXT DEFAULT 'pending',
-            applied_at TEXT,
-            updated_at TEXT
+            interview_started INTEGER DEFAULT 0,
+            applied_at TEXT
         )
         """)
 
-# ---------------- UPLOAD ----------------
-@app.post("/candidates/upload-resume")
-async def upload_resume(
-    tenant: str = Form(...),
-    cleaned_text: str = Form(...),
-    resume: UploadFile = File(...)
-):
-    features = tfidf.transform([cleaned_text])
-    pred = int(clf.predict(features)[0])
-    predicted_role = category_mapping.get(pred, "Unknown")
+# ---------------- TENANTS ----------------
+@app.get("/tenants")
+def tenants():
+    return {"tenants":company_structure}
 
-    roles = company_structure[tenant]["roles"]
-    eligible = predicted_role in roles
-
-    recruiter = None
-
+# ---------------- SAVE FINAL ----------------
+@app.post("/save-final")
+def save_final(data: list = Form(...), tenant: str = Form(...)):
+    data = eval(data)
     with get_conn() as conn:
-        if eligible:
-            count = conn.execute(
-                "SELECT COUNT(*) FROM candidates WHERE tenant=? AND eligible=1",
-                (tenant,)
-            ).fetchone()[0]
-
-            recruiter = company_structure[tenant]["recruiters"][
-                count % len(company_structure[tenant]["recruiters"])
-            ]
-
-        tracking_id = str(uuid.uuid4())
-        now = datetime.now(timezone.utc).isoformat()
-
-        conn.execute("""
-        INSERT INTO candidates (
-            tracking_id, tenant, predicted_role,
-            eligible, process_status,
-            assigned_recruiter, ranking_score,
-            applied_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            tracking_id,
-            tenant,
-            predicted_role,
-            int(eligible),
-            "selected_for_interview" if eligible else "rejected",
-            recruiter,
-            0.0,
-            now,
-            now
-        ))
-
-    return {"tracking_id": tracking_id, "assigned_recruiter": recruiter}
+        for d in data:
+            conn.execute("""
+            INSERT OR IGNORE INTO candidates (
+                tracking_id, tenant, predicted_role,
+                eligible, assigned_recruiter,
+                hybrid_score, rank, applied_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,(
+                d["tracking_id"], tenant, d["Role"],
+                int(d["Eligible"]), d["Recruiter"],
+                d["Score"], d["Rank"],
+                datetime.now(timezone.utc).isoformat()
+            ))
+    return {"msg":"saved"}
 
 # ---------------- INTERVIEWER ----------------
 @app.get("/interviewers/candidates")
-def get_candidates(tenant: str = Query(...), interviewer: str = Query(...)):
+def get_candidates(tenant:str=Query(...),interviewer:str=Query(...)):
     with get_conn() as conn:
-        rows = conn.execute("""
+        rows=conn.execute("""
         SELECT * FROM candidates
         WHERE tenant=? AND assigned_recruiter=? AND eligible=1
-        """, (tenant, interviewer)).fetchall()
-
+        """,(tenant,interviewer)).fetchall()
     return [dict(r) for r in rows]
 
 # ---------------- UPDATE ----------------
-@app.put("/interview/update-status")
-def update_status(
-    tracking_id: str = Form(...),
-    test_status: str = Form(...),
-    interview_status: str = Form(...),
-    final_status: str = Form(...)
-):
+@app.put("/update-status")
+def update_status(tracking_id:str=Form(...),field:str=Form(...),value:str=Form(...)):
     with get_conn() as conn:
-        conn.execute("""
-        UPDATE candidates
-        SET test_status=?, interview_status=?, final_status=?
-        WHERE tracking_id=?
-        """, (test_status, interview_status, final_status, tracking_id))
+        conn.execute(f"UPDATE candidates SET {field}=? WHERE tracking_id=?",(value,tracking_id))
+    return {"msg":"ok"}
 
-    return {"message": "Status updated"}
+# ---------------- STATUS ----------------
+@app.get("/status/{tid}")
+def status(tid:str):
+    with get_conn() as conn:
+        r=conn.execute("SELECT * FROM candidates WHERE tracking_id=?",(tid,)).fetchone()
+    if not r: raise HTTPException(404)
+    return dict(r)
 
-# ---------------- RUN ----------------
-if __name__ == "__main__":
-    uvicorn.run("backend:app", host="0.0.0.0", port=8000)
+if __name__=="__main__":
+    uvicorn.run("backend:app",host="0.0.0.0",port=8000)
