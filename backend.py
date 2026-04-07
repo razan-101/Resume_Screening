@@ -21,93 +21,39 @@ DB_PATH = os.path.join(BASE_DIR, "resume_screening.db")
 # ---------------- COMPANY STRUCTURE ----------------
 company_structure = {
     "Tech Solutions Pvt Ltd": {
-        "roles": [
-            "Java Developer", "Python Developer", "Web Designing",
-            "DotNet Developer", "Database", "DevOps Engineer",
-            "Blockchain", "SAP Developer"
-        ],
-        "recruiters": [
-            "Arjun – Backend Team",
-            "Rohan – Frontend Team",
-            "Vikram – DevOps Team"
-        ]
+        "roles": ["Java Developer","Python Developer","Web Designing","DotNet Developer","Database","DevOps Engineer","Blockchain","SAP Developer"],
+        "recruiters": ["Arjun – Backend Team","Rohan – Frontend Team","Vikram – DevOps Team"]
     },
     "Data & Analytics Corp": {
-        "roles": [
-            "Data Science", "Hadoop", "ETL Developer",
-            "Business Analyst", "Operations Manager", "PMO"
-        ],
-        "recruiters": [
-            "Amit – Data Engineering",
-            "Neha – Analytics",
-            "Suresh – Program Management"
-        ]
+        "roles": ["Data Science","Hadoop","ETL Developer","Business Analyst","Operations Manager","PMO"],
+        "recruiters": ["Amit – Data Engineering","Neha – Analytics","Suresh – Program Management"]
     },
     "Quality & Security Systems Ltd": {
-        "roles": [
-            "Testing", "Automation Testing", "Network Security Engineer"
-        ],
-        "recruiters": [
-            "Priya – QA",
-            "Karan – Automation",
-            "Rahul – Security"
-        ]
+        "roles": ["Testing","Automation Testing","Network Security Engineer"],
+        "recruiters": ["Priya – QA","Karan – Automation","Rahul – Security"]
     },
     "Enterprise & Sales Solutions": {
-        "roles": ["Sales", "HR", "Advocate"],
-        "recruiters": [
-            "Ankit – Sales",
-            "Pooja – HR",
-            "Manish – Legal"
-        ]
+        "roles": ["Sales","HR","Advocate"],
+        "recruiters": ["Ankit – Sales","Pooja – HR","Manish – Legal"]
     },
     "Engineering & Manufacturing Group": {
-        "roles": [
-            "Mechanical Engineer", "Electrical Engineering", "Civil Engineer"
-        ],
-        "recruiters": [
-            "Rajesh – Mechanical",
-            "Deepak – Electrical",
-            "Sneha – Civil"
-        ]
+        "roles": ["Mechanical Engineer","Electrical Engineering","Civil Engineer"],
+        "recruiters": ["Rajesh – Mechanical","Deepak – Electrical","Sneha – Civil"]
     },
     "Creative & Wellness Services": {
-        "roles": ["Arts", "Health and Fitness"],
-        "recruiters": [
-            "Meera – Creative",
-            "Kavya – Wellness",
-            "Ananya – Lifestyle"
-        ]
+        "roles": ["Arts","Health and Fitness"],
+        "recruiters": ["Meera – Creative","Kavya – Wellness","Ananya – Lifestyle"]
     }
 }
 
 # ---------------- CATEGORY MAPPING ----------------
 category_mapping = {
-    15: "Java Developer",
-    23: "Testing",
-    8: "DevOps Engineer",
-    20: "Python Developer",
-    24: "Web Designing",
-    12: "HR",
-    13: "Hadoop",
-    3: "Blockchain",
-    10: "ETL Developer",
-    18: "Operations Manager",
-    6: "Data Science",
-    22: "Sales",
-    16: "Mechanical Engineer",
-    1: "Arts",
-    7: "Database",
-    11: "Electrical Engineering",
-    14: "Health and Fitness",
-    19: "PMO",
-    4: "Business Analyst",
-    9: "DotNet Developer",
-    2: "Automation Testing",
-    17: "Network Security Engineer",
-    21: "SAP Developer",
-    5: "Civil Engineer",
-    0: "Advocate"
+    15:"Java Developer",23:"Testing",8:"DevOps Engineer",20:"Python Developer",
+    24:"Web Designing",12:"HR",13:"Hadoop",3:"Blockchain",10:"ETL Developer",
+    18:"Operations Manager",6:"Data Science",22:"Sales",16:"Mechanical Engineer",
+    1:"Arts",7:"Database",11:"Electrical Engineering",14:"Health and Fitness",
+    19:"PMO",4:"Business Analyst",9:"DotNet Developer",2:"Automation Testing",
+    17:"Network Security Engineer",21:"SAP Developer",5:"Civil Engineer",0:"Advocate"
 }
 
 # ---------------- LOAD MODEL ----------------
@@ -153,6 +99,11 @@ def startup():
             updated_at TEXT
         )
         """)
+
+# ---------------- 🔥 FIX: TENANTS API ----------------
+@app.get("/tenants")
+def get_tenants():
+    return {"tenants": company_structure}
 
 # ---------------- UPLOAD ----------------
 @app.post("/candidates/upload-resume")
@@ -203,7 +154,13 @@ async def upload_resume(
             now
         ))
 
-    return {"tracking_id": tracking_id, "assigned_recruiter": recruiter}
+    return {
+        "tracking_id": tracking_id,
+        "assigned_recruiter": recruiter,
+        "predicted_role": predicted_role,
+        "ranking_score": 0.0,
+        "eligible": eligible
+    }
 
 # ---------------- INTERVIEWER ----------------
 @app.get("/interviewers/candidates")
@@ -232,6 +189,20 @@ def update_status(
         """, (test_status, interview_status, final_status, tracking_id))
 
     return {"message": "Status updated"}
+
+# ---------------- CANDIDATE STATUS ----------------
+@app.get("/candidates/status/{tracking_id}")
+def candidate_status(tracking_id: str):
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM candidates WHERE tracking_id=?",
+            (tracking_id,)
+        ).fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    return dict(row)
 
 # ---------------- RUN ----------------
 if __name__ == "__main__":
