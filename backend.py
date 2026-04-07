@@ -10,8 +10,6 @@ from datetime import datetime, timezone
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sklearn.metrics.pairwise import cosine_similarity
-
 
 # ---------------- PATHS ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -20,8 +18,7 @@ CLF_PATH = os.path.join(MODEL_DIR, "clf.pkl")
 TFIDF_PATH = os.path.join(MODEL_DIR, "tfidf.pkl")
 DB_PATH = os.path.join(BASE_DIR, "resume_screening.db")
 
-
-# ---------------- FULL COMPANY STRUCTURE ----------------
+# ---------------- COMPANY STRUCTURE ----------------
 company_structure = {
     "Tech Solutions Pvt Ltd": {
         "roles": [
@@ -84,8 +81,7 @@ company_structure = {
     }
 }
 
-
-# ---------------- FULL CATEGORY MAPPING ----------------
+# ---------------- CATEGORY MAPPING ----------------
 category_mapping = {
     15: "Java Developer",
     23: "Testing",
@@ -111,23 +107,18 @@ category_mapping = {
     17: "Network Security Engineer",
     21: "SAP Developer",
     5: "Civil Engineer",
-    0: "Advocate",
+    0: "Advocate"
 }
 
-
 # ---------------- LOAD MODEL ----------------
-if not os.path.exists(CLF_PATH) or not os.path.exists(TFIDF_PATH):
-    raise RuntimeError("Model files missing in /model folder")
-
 with open(CLF_PATH, "rb") as f:
     clf = pickle.load(f)
 
 with open(TFIDF_PATH, "rb") as f:
     tfidf = pickle.load(f)
 
-
 # ---------------- FASTAPI ----------------
-app = FastAPI(title="Resume Screening Backend")
+app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
@@ -136,17 +127,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 # ---------------- DB ----------------
 def get_conn():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
-
-def init_db():
+@app.on_event("startup")
+def startup():
     with get_conn() as conn:
-        # MAIN TABLE
         conn.execute("""
         CREATE TABLE IF NOT EXISTS candidates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -157,58 +146,13 @@ def init_db():
             process_status TEXT,
             assigned_recruiter TEXT,
             ranking_score REAL,
-
             test_status TEXT DEFAULT 'pending',
             interview_status TEXT DEFAULT 'pending',
             final_status TEXT DEFAULT 'pending',
-
             applied_at TEXT,
             updated_at TEXT
         )
         """)
-
-        # FINAL BATCH TABLE
-        conn.execute("""
-        CREATE TABLE IF NOT EXISTS final_batches (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            batch_name TEXT,
-            tenant TEXT,
-            tracking_id TEXT,
-            predicted_role TEXT,
-            ranking_score REAL,
-            assigned_recruiter TEXT,
-            created_at TEXT
-        )
-        """)
-
-
-@app.on_event("startup")
-def startup():
-    init_db()
-
-
-# ---------------- SIMILARITY ----------------
-def compute_similarity(text, roles):
-    try:
-        vec = tfidf.transform([text])
-        return float(vec.sum())
-    except:
-        return 0.0
-
-
-# ---------------- BASIC APIs ----------------
-@app.get("/")
-def root():
-    return {"message": "Backend running"}
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-@app.get("/tenants")
-def tenants():
-    return {"tenants": company_structure}
-
 
 # ---------------- UPLOAD ----------------
 @app.post("/candidates/upload-resume")
@@ -217,20 +161,13 @@ async def upload_resume(
     cleaned_text: str = Form(...),
     resume: UploadFile = File(...)
 ):
-    if tenant not in company_structure:
-        raise HTTPException(400, "Invalid tenant")
-
-    if len(cleaned_text.strip()) < 10:
-        raise HTTPException(400, "Weak resume")
-
     features = tfidf.transform([cleaned_text])
     pred = int(clf.predict(features)[0])
     predicted_role = category_mapping.get(pred, "Unknown")
 
     roles = company_structure[tenant]["roles"]
-    ranking_score = compute_similarity(cleaned_text, roles)
-
     eligible = predicted_role in roles
+
     recruiter = None
 
     with get_conn() as conn:
@@ -240,7 +177,9 @@ async def upload_resume(
                 (tenant,)
             ).fetchone()[0]
 
-            recruiter = company_structure[tenant]["recruiters"][count % len(company_structure[tenant]["recruiters"])]
+            recruiter = company_structure[tenant]["recruiters"][
+                count % len(company_structure[tenant]["recruiters"])
+            ]
 
         tracking_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
@@ -253,39 +192,31 @@ async def upload_resume(
             applied_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            tracking_id, tenant, predicted_role,
+            tracking_id,
+            tenant,
+            predicted_role,
             int(eligible),
             "selected_for_interview" if eligible else "rejected",
-            recruiter, ranking_score,
-            now, now
+            recruiter,
+            0.0,
+            now,
+            now
         ))
 
-    return {
-        "tracking_id": tracking_id,
-        "predicted_role": predicted_role,
-        "eligible": eligible,
-        "ranking_score": ranking_score,
-        "assigned_recruiter": recruiter
-    }
+    return {"tracking_id": tracking_id, "assigned_recruiter": recruiter}
 
-
-# ---------------- FILTERED INTERVIEWER DATA ----------------
+# ---------------- INTERVIEWER ----------------
 @app.get("/interviewers/candidates")
-def get_candidates(
-    tenant: str = Query(...),
-    interviewer: str = Query(...)
-):
+def get_candidates(tenant: str = Query(...), interviewer: str = Query(...)):
     with get_conn() as conn:
         rows = conn.execute("""
         SELECT * FROM candidates
         WHERE tenant=? AND assigned_recruiter=? AND eligible=1
-        ORDER BY ranking_score DESC
         """, (tenant, interviewer)).fetchall()
 
     return [dict(r) for r in rows]
 
-
-# ---------------- UPDATE STATUS ----------------
+# ---------------- UPDATE ----------------
 @app.put("/interview/update-status")
 def update_status(
     tracking_id: str = Form(...),
@@ -296,65 +227,12 @@ def update_status(
     with get_conn() as conn:
         conn.execute("""
         UPDATE candidates
-        SET test_status=?, interview_status=?, final_status=?, updated_at=?
+        SET test_status=?, interview_status=?, final_status=?
         WHERE tracking_id=?
-        """, (
-            test_status,
-            interview_status,
-            final_status,
-            datetime.now(timezone.utc).isoformat(),
-            tracking_id
-        ))
+        """, (test_status, interview_status, final_status, tracking_id))
 
     return {"message": "Status updated"}
 
-
-# ---------------- FINAL BATCH ----------------
-@app.post("/final-batch")
-def save_batch(
-    batch_name: str = Form(...),
-    tenant: str = Form(...),
-    data: str = Form(...)
-):
-    candidates = json.loads(data)
-
-    with get_conn() as conn:
-        for c in candidates:
-            conn.execute("""
-            INSERT INTO final_batches (
-                batch_name, tenant, tracking_id,
-                predicted_role, ranking_score,
-                assigned_recruiter, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                batch_name,
-                tenant,
-                c["tracking_id"],
-                c["predicted_role"],
-                c["ranking_score"],
-                c["assigned_recruiter"],
-                datetime.now(timezone.utc).isoformat()
-            ))
-
-    return {"message": "Batch saved successfully"}
-
-
-# ---------------- STATUS ----------------
-@app.get("/candidates/status/{tid}")
-def status(tid: str):
-    with get_conn() as conn:
-        row = conn.execute(
-            "SELECT * FROM candidates WHERE tracking_id=?",
-            (tid,)
-        ).fetchone()
-
-    if not row:
-        return {"error": "not found"}
-
-    return dict(row)
-
-
 # ---------------- RUN ----------------
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("backend:app", host="0.0.0.0", port=port)
+    uvicorn.run("backend:app", host="0.0.0.0", port=8000)
