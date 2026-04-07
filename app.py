@@ -6,55 +6,46 @@ BACKEND_URL = "https://resume-backend-i634.onrender.com"
 
 st.set_page_config(page_title="Resume Screening", layout="wide")
 
-# ---------------- SESSION ----------------
+# ---------------- SESSION LOGIN ----------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
+
 if "user" not in st.session_state:
     st.session_state.user = None
-if "tenant" not in st.session_state:
-    st.session_state.tenant = None
 
 # ---------------- PASSWORDS ----------------
-interviewer_passwords = {
-    "Arjun – Backend Team": "arjun123",
-    "Rohan – Frontend Team": "rohan123",
-    "Vikram – DevOps Team": "vikram123",
-    "Amit – Data Engineering": "amit123",
-    "Neha – Analytics": "neha123",
-    "Suresh – Program Management": "suresh123",
-    "Priya – QA": "priya123",
-    "Karan – Automation": "karan123",
-    "Rahul – Security": "rahul123",
-    "Ankit – Sales": "ankit123",
-    "Pooja – HR": "pooja123",
-    "Manish – Legal": "manish123",
-    "Rajesh – Mechanical": "rajesh123",
-    "Deepak – Electrical": "deepak123",
-    "Sneha – Civil": "sneha123",
-    "Meera – Creative": "meera123",
-    "Kavya – Wellness": "kavya123",
-    "Ananya – Lifestyle": "ananya123",
+passwords = {
+    "Tech Solutions Pvt Ltd": {
+        "Arjun – Backend Team": "1234",
+        "Rohan – Frontend Team": "1234",
+        "Vikram – DevOps Team": "1234"
+    },
+    "Data & Analytics Corp": {
+        "Amit – Data Engineering": "1234",
+        "Neha – Analytics": "1234",
+        "Suresh – Program Management": "1234"
+    },
+    "Quality & Security Systems Ltd": {
+        "Priya – QA": "1234",
+        "Karan – Automation": "1234",
+        "Rahul – Security": "1234"
+    },
+    "Enterprise & Sales Solutions": {
+        "Ankit – Sales": "1234",
+        "Pooja – HR": "1234",
+        "Manish – Legal": "1234"
+    },
+    "Engineering & Manufacturing Group": {
+        "Rajesh – Mechanical": "1234",
+        "Deepak – Electrical": "1234",
+        "Sneha – Civil": "1234"
+    },
+    "Creative & Wellness Services": {
+        "Meera – Creative": "1234",
+        "Kavya – Wellness": "1234",
+        "Ananya – Lifestyle": "1234"
+    }
 }
-
-# ---------------- LOGIN ----------------
-def login_page():
-    st.title("🔐 Interviewer Login")
-
-    tenants_data = requests.get(f"{BACKEND_URL}/tenants").json()["tenants"]
-
-    tenant = st.selectbox("Select Company", list(tenants_data.keys()))
-    interviewer = st.selectbox("Select Your Name", tenants_data[tenant]["recruiters"])
-    pwd = st.text_input("Password", type="password")
-
-    if st.button("Login"):
-        if interviewer in interviewer_passwords and pwd == interviewer_passwords[interviewer]:
-            st.session_state.logged_in = True
-            st.session_state.user = interviewer
-            st.session_state.tenant = tenant
-            st.success("Login successful")
-            st.rerun()
-        else:
-            st.error("Invalid credentials")
 
 # ---------------- UTIL ----------------
 def extract_text(file):
@@ -79,7 +70,7 @@ def extract_pii(text):
 def generate_hash(name, email, phone):
     return hashlib.sha256(f"{name}-{email}-{phone}".encode()).hexdigest()
 
-# ---------------- MAIN ----------------
+# ---------------- MAIN UI ----------------
 st.title("🚀 Privacy-Aware Resume Screening System")
 
 tabs = st.tabs(["📂 Recruiter", "👨‍💼 Interviewer", "🧑 Candidate"])
@@ -104,6 +95,7 @@ with tabs[0]:
 
         st.subheader("🔍 Duplicate Detection")
 
+        # -------- EXACT DUP --------
         for f in files:
             text = extract_text(f)
             name, email, phone = extract_pii(text)
@@ -118,6 +110,7 @@ with tabs[0]:
             raw_files.append(f)
             hashes.append(h)
 
+        # -------- FUZZY DUP --------
         vectorizer = TfidfVectorizer()
         tfidf = vectorizer.fit_transform(texts)
         sim = cosine_similarity(tfidf)
@@ -134,12 +127,18 @@ with tabs[0]:
                     removed.add(j)
                     st.warning(f"⚠️ Fuzzy duplicate removed → {raw_files[j].name}")
 
+        # -------- PROCESS --------
         results = []
 
         for i in keep:
             f = raw_files[i]
             uid = hashes[i][:8]
+
             clean = clean_text(texts[i])
+
+            if len(clean) < 10:
+                st.warning(f"⚠️ Weak resume skipped → {f.name}")
+                continue
 
             res = requests.post(
                 f"{BACKEND_URL}/candidates/upload-resume",
@@ -154,68 +153,104 @@ with tabs[0]:
             data = res.json()
 
             results.append({
-                "tracking_id": data["tracking_id"],
+                "tracking_id": data.get("tracking_id"),
                 "UID": uid,
-                "Role": data["predicted_role"],
-                "Score": data["ranking_score"],
-                "Eligible": data["eligible"],
-                "Recruiter": data["assigned_recruiter"]
+                "Role": data.get("predicted_role"),
+                "Score": data.get("ranking_score"),
+                "Eligible": data.get("eligible"),
+                "Eligible_UI": "✅ Yes" if data.get("eligible") else "❌ No",
+                "Recruiter": data.get("assigned_recruiter")
             })
 
         if results:
-            df = pd.DataFrame(results).sort_values("Score", ascending=False)
-            df["Rank"] = range(1, len(df)+1)
+            df = pd.DataFrame(results).sort_values("Score", ascending=False).reset_index(drop=True)
+            df["Rank"] = df.index + 1
+            df["Eligible"] = df["Eligible_UI"]
 
-            st.dataframe(df[["Rank","UID","Role","Score","Eligible","Recruiter"]])
+            df = df[["Rank","UID","Role","Score","Eligible","Recruiter"]]
+
+            st.subheader("📊 Final Ranked Candidates")
+            st.dataframe(df, use_container_width=True)
+
+            st.download_button("⬇️ Download CSV", df.to_csv(index=False), "results.csv")
+
+            # -------- FINAL BATCH --------
+            st.subheader("📦 Finalize Batch")
+
+            batch_name = st.text_input("Batch Name")
+
+            if st.button("🚀 Send Final Eligible Candidates"):
+
+                eligible = [r for r in results if r["Eligible"]]
+
+                if not eligible:
+                    st.warning("No eligible candidates")
+                    st.stop()
+
+                payload = []
+                for r in eligible:
+                    payload.append({
+                        "tracking_id": r["tracking_id"],
+                        "predicted_role": r["Role"],
+                        "ranking_score": r["Score"],
+                        "assigned_recruiter": r["Recruiter"]
+                    })
+
+                requests.post(
+                    f"{BACKEND_URL}/final-batch",
+                    data={
+                        "batch_name": batch_name,
+                        "tenant": tenant,
+                        "data": json.dumps(payload)
+                    }
+                )
+
+                st.success("✅ Batch Saved Successfully")
 
 # ================= INTERVIEWER =================
 with tabs[1]:
+    st.header("👨‍💼 Interviewer Login")
 
-    if not st.session_state.logged_in:
-        login_page()
-    else:
-        st.header(f"👨‍💼 {st.session_state.user}")
+    tenants = list(passwords.keys())
+    tenant = st.selectbox("Select Company", tenants)
 
-        if st.button("Logout"):
-            st.session_state.logged_in = False
-            st.rerun()
+    interviewer = st.selectbox("Select Interviewer", list(passwords[tenant].keys()))
+    pwd = st.text_input("Enter Password", type="password")
 
-        res = requests.get(
-            f"{BACKEND_URL}/interviewers/candidates",
-            params={
-                "tenant": st.session_state.tenant,
-                "interviewer": st.session_state.user
-            }
-        )
-
-        data = res.json()
-
-        if not data:
-            st.info("No candidates assigned")
+    if st.button("Login"):
+        if pwd == passwords[tenant][interviewer]:
+            st.session_state.logged_in = True
+            st.session_state.user = interviewer
+            st.session_state.tenant = tenant
+            st.success("Login successful")
         else:
-            for c in data:
-                st.subheader(c["tracking_id"])
+            st.error("Wrong password")
 
-                col1, col2, col3 = st.columns(3)
+    if st.session_state.logged_in:
+        st.subheader(f"Welcome {st.session_state.user}")
 
-                with col1:
-                    test = st.selectbox("Test", ["pending","completed"], key=f"t{c['tracking_id']}")
-                with col2:
-                    interview = st.selectbox("Interview", ["pending","completed"], key=f"i{c['tracking_id']}")
-                with col3:
-                    final = st.selectbox("Final", ["pending","selected","rejected"], key=f"f{c['tracking_id']}")
+        res = requests.get(f"{BACKEND_URL}/interviewers/candidates")
 
-                if st.button(f"Update {c['tracking_id']}"):
-                    requests.put(
-                        f"{BACKEND_URL}/interview/update-status",
-                        data={
-                            "tracking_id": c["tracking_id"],
-                            "test_status": test,
-                            "interview_status": interview,
-                            "final_status": final
-                        }
-                    )
-                    st.success("Updated")
+        if res.status_code == 200:
+            data = res.json()
+            filtered = [c for c in data if c["assigned_recruiter"] == st.session_state.user]
+
+            if filtered:
+                st.dataframe(pd.DataFrame(filtered), use_container_width=True)
+
+                for c in filtered:
+                    st.write(f"UID: {c['tracking_id']}")
+
+                    if st.button(f"Mark Test Done {c['tracking_id']}"):
+                        requests.put(f"{BACKEND_URL}/interview/update/{c['tracking_id']}?status=test_done")
+
+                    if st.button(f"Select {c['tracking_id']}"):
+                        requests.put(f"{BACKEND_URL}/interview/update/{c['tracking_id']}?status=selected")
+
+                    if st.button(f"Reject {c['tracking_id']}"):
+                        requests.put(f"{BACKEND_URL}/interview/update/{c['tracking_id']}?status=rejected")
+            else:
+                st.info("No candidates assigned")
 
 # ================= CANDIDATE =================
 with tabs[2]:
@@ -227,10 +262,6 @@ with tabs[2]:
         res = requests.get(f"{BACKEND_URL}/candidates/status/{tid}")
 
         if res.status_code == 200:
-            d = res.json()
-            st.write("Role:", d.get("predicted_role"))
-            st.write("Test:", d.get("test_status"))
-            st.write("Interview:", d.get("interview_status"))
-            st.write("Final:", d.get("final_status"))
+            st.json(res.json())
         else:
-            st.error("Not found")
+            st.error("Candidate not found")
