@@ -251,7 +251,7 @@ with tabs[1]:
                         requests.put(f"{BACKEND_URL}/interview/update/{c['tracking_id']}?status=rejected")
             else:
                 st.info("No candidates assigned")
-
+st.write(data)
 # ================= CANDIDATE =================
 with tabs[2]:
     st.header("🧑 Candidate Tracking")
