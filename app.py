@@ -200,9 +200,9 @@ def generate_fingerprint(name, email, phone):
     return hashlib.sha256(f"{name}-{email}-{phone}".encode()).hexdigest()
 
 def render_resume_page(tenants):
-    st.header("📂 Batch Resume Processing")
+    st.header("Batch Resume Processing")
     
-    tenant = st.selectbox("🏢 Select Company", tenants)
+    tenant = st.selectbox("Select Company", tenants)
     files = st.file_uploader("📄 Upload Resumes (PDF/DOCX/TXT)", accept_multiple_files=True, type=["pdf", "docx", "txt"])
     
     if st.button("⚡ Process Batch"):
@@ -277,7 +277,7 @@ def render_resume_page(tenants):
             st.success(f"✅ Processed {len(results)} unique candidates from {len(files)} files.")
 
     if "processing_results" in st.session_state and st.session_state.processing_results:
-        st.subheader("📊 Candidate Ranking & Assignment")
+        st.subheader("Candidate Ranking & Assignment")
         
         df = pd.DataFrame(st.session_state.processing_results)
         df = df.sort_values("ranking_score", ascending=False).reset_index(drop=True)
@@ -300,7 +300,7 @@ def render_resume_page(tenants):
         # e.g., "Arjun – Backend Team"
         st.dataframe(df_display[["Rank", "tracking_id", "predicted_role", "ranking_score", "eligible", "assigned_recruiter"]], use_container_width=True)
 
-        if st.button("🚀 Send Final Eligible Candidates to DB"):
+        if st.button("Send Final Eligible Candidates to DB"):
             eligible_rows = [r for r in st.session_state.processing_results if r.get("eligible")]
             if not eligible_rows:
                 st.warning("No eligible candidates to save.")
@@ -321,7 +321,7 @@ def render_resume_page(tenants):
                     st.error(f"Error saving batch: {e}")
 
 def render_interviewer_page():
-    st.header("👨‍💼 Interviewer Dashboard")
+    st.header("Interviewer Dashboard")
     
     if "logged_in" not in st.session_state or not st.session_state.logged_in:
         tenant_list = list(passwords.keys())
@@ -358,7 +358,7 @@ def render_interviewer_page():
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.subheader("📝 Process Updates")
+                    st.subheader("Process Updates")
                     test_s = st.selectbox("Test Status", ["pending", "attended", "passed", "failed"], index=["pending", "attended", "passed", "failed"].index(c_details.get("test_status", "pending")))
                     if st.button("Update Test"):
                         requests.put(f"{BACKEND_URL}/interview/update-status", data={"tracking_id": sel_tid, "test_status": test_s})
@@ -382,11 +382,11 @@ def render_interviewer_page():
                             st.rerun()
                 
                 with col2:
-                    st.subheader("📊 Word Cloud Insights")
+                    st.subheader("Word Cloud Insights")
                     render_wordcloud(c_details.get("cleaned_text", ""))
                     
                     st.divider()
-                    st.subheader("🔍 Structured Insights")
+                    st.subheader("Structured Insights")
                     structured_info = extract_structured_info(c_details.get("cleaned_text", ""))
                     if structured_info:
                         for section, content in structured_info.items():
@@ -400,7 +400,7 @@ def render_interviewer_page():
             st.error(f"Error: {e}")
 
 def render_candidate_page():
-    st.header("🧑 Candidate Tracking")
+    st.header("Candidate Tracking")
     tracking_id = st.text_input("Enter Tracking ID")
     
     if st.button("Track Status"):
@@ -425,8 +425,8 @@ def render_candidate_page():
                 if res['interview_time']:
                     st.info(f"📅 Interview Scheduled: {res['interview_time']}")
                 
-                if res['final_status'] == "selected": st.success("🎉 Congratulations! You are selected.")
-                elif res['final_status'] == "rejected": st.error("❌ Sorry, you were not selected.")
+                if res['final_status'] == "selected": st.success("Congratulations! You are selected.")
+                elif res['final_status'] == "rejected": st.error("Sorry, you were not selected.")
                 
             except Exception:
                 st.error("Candidate not found.")
@@ -436,7 +436,7 @@ def main():
     ensure_nltk_resource("corpora/stopwords", "stopwords")
     ensure_nltk_resource("tokenizers/punkt", "punkt")
 
-    st.title("🚀 Privacy-Aware AI Resume Screening")
+    st.title("Privacy-Aware AI Resume Screening")
     
     try:
         tenants_payload = get_backend_data("/tenants")
