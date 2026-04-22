@@ -23,7 +23,7 @@ def ensure_nltk_resource(resource_path, resource_name):
     except LookupError:
         nltk.download(resource_name, quiet=True)
 
-# ---------------- PASSWORDS (HARDCODED FOR ORIGINALITY) ----------------
+# ---------------- PASSWORDS ----------------
 passwords = {
     "Tech Solutions Pvt Ltd": {"Aravind – Backend Team": "aravind1234", "Ishaan – Frontend Team": "ishaan1234", "Advait – DevOps Team": "advait1234"},
     "Data & Analytics Corp": {"Vihaan – Data Engineering": "vihaan1234", "Ananya – Analytics": "ananya1234", "Pranav – Program Management": "pranav1234"},
@@ -42,7 +42,7 @@ def remove_pii(text):
     text = re.sub(r"https?://\S+", " ", text)
     text = re.sub(r"linkedin\.com/\S+", " ", text)
     
-    # Mask common location keywords (e.g., Odisha, India)
+    # Mask common location keywords 
     locations = ["odisha", "india", "bhubaneswar", "bangalore", "hyderabad", "pune", "mumbai", "delhi"]
     for loc in locations:
         text = re.sub(rf"\b{loc}\b", " ", text, flags=re.IGNORECASE)
@@ -53,8 +53,6 @@ def remove_pii(text):
         text = re.sub(rf"\b{label}\b", " ", text, flags=re.IGNORECASE)
 
     # Name removal heuristic: 
-    # Usually the name is at the top. We've already anonymized the storage, 
-    # but for the word cloud/clean text, we'll strip the first line if it looks like a name header
     lines = text.split('\n')
     if lines and len(lines[0].split()) < 5: # Heuristic for a name header
         lines[0] = " "
@@ -202,12 +200,12 @@ def generate_fingerprint(name, email, phone):
     return hashlib.sha256(f"{name}-{email}-{phone}".encode()).hexdigest()
 
 def render_resume_page(tenants):
-    st.header("📂 Batch Resume Processing")
+    st.header("Batch Resume Processing")
     
-    tenant = st.selectbox("🏢 Select Company", tenants)
-    files = st.file_uploader("📄 Upload Resumes (PDF/DOCX/TXT)", accept_multiple_files=True, type=["pdf", "docx", "txt"])
+    tenant = st.selectbox("Select Company", tenants)
+    files = st.file_uploader("Upload Resumes (PDF/DOCX/TXT)", accept_multiple_files=True, type=["pdf", "docx", "txt"])
     
-    if st.button("⚡ Process Batch"):
+    if st.button("Process Batch"):
         if not files:
             st.warning("Please upload resumes first.")
             return
@@ -224,7 +222,7 @@ def render_resume_page(tenants):
                 text = extract_resume_text(f.name, file_bytes)
                 
                 if not text.strip():
-                    st.error(f"❌ Empty file: {f.name}")
+                    st.error(f"Empty file: {f.name}")
                     continue
                 
                 # 1. Identity-based Deduplication (Name, Email, Phone)
@@ -232,7 +230,7 @@ def render_resume_page(tenants):
                 fingerprint = generate_fingerprint(name, email, phone)
                 
                 if fingerprint in seen_fingerprints:
-                    st.warning(f"⚠️ Skipping duplicate candidate (same identity in current batch): {f.name}")
+                    st.warning(f"Skipping duplicate candidate (same identity in current batch): {f.name}")
                     continue
                 
                 # Check if candidate already exists in DB
@@ -240,7 +238,7 @@ def render_resume_page(tenants):
                 try:
                     check_res = requests.get(f"{BACKEND_URL}/candidates/status/{temp_tid}")
                     if check_res.status_code == 200:
-                        st.warning(f"⚠️ Skipping duplicate candidate (already exists in database): {f.name}")
+                        st.warning(f"Skipping duplicate candidate (already exists in database): {f.name}")
                         continue
                 except:
                     pass
@@ -257,7 +255,7 @@ def render_resume_page(tenants):
                         is_fuzzy_duplicate = True
                 
                 if is_fuzzy_duplicate:
-                    st.warning(f"⚠️ Skipping duplicate candidate (highly similar content): {f.name}")
+                    st.warning(f"Skipping duplicate candidate (highly similar content): {f.name}")
                     continue
 
                 # Add to unique set
@@ -276,10 +274,10 @@ def render_resume_page(tenants):
         if results:
             st.session_state.processing_results = results
             st.session_state.selected_tenant = tenant
-            st.success(f"✅ Processed {len(results)} unique candidates from {len(files)} files.")
+            st.success(f"Processed {len(results)} unique candidates from {len(files)} files.")
 
     if "processing_results" in st.session_state and st.session_state.processing_results:
-        st.subheader("📊 Candidate Ranking & Assignment")
+        st.subheader("Candidate Ranking & Assignment")
         
         df = pd.DataFrame(st.session_state.processing_results)
         df = df.sort_values("ranking_score", ascending=False).reset_index(drop=True)
@@ -296,13 +294,13 @@ def render_resume_page(tenants):
         
         # Display the table with assigned interviewer/specialty
         df_display = df.copy()
-        df_display["eligible"] = df_display["eligible"].apply(lambda x: "✅ Yes" if x else "❌ No")
+        df_display["eligible"] = df_display["eligible"].apply(lambda x: "Yes" if x else "No")
         
         # Split recruiter name to show "Specialty" if needed, though here they are already named with roles
         # e.g., "Arjun – Backend Team"
         st.dataframe(df_display[["Rank", "tracking_id", "predicted_role", "ranking_score", "eligible", "assigned_recruiter"]], use_container_width=True)
 
-        if st.button("🚀 Send Final Eligible Candidates to DB"):
+        if st.button("Send Final Eligible Candidates to DB"):
             eligible_rows = [r for r in st.session_state.processing_results if r.get("eligible")]
             if not eligible_rows:
                 st.warning("No eligible candidates to save.")
@@ -315,7 +313,7 @@ def render_resume_page(tenants):
                         "data": json.dumps(eligible_rows)
                     })
                     if res.status_code == 200:
-                        st.success("✅ Candidates saved and assigned to interviewers successfully!")
+                        st.success("Candidates saved and assigned to interviewers successfully!")
                         del st.session_state.processing_results
                     else:
                         st.error(f"Backend error: {res.status_code} - {res.text}")
@@ -323,7 +321,7 @@ def render_resume_page(tenants):
                     st.error(f"Error saving batch: {e}")
 
 def render_interviewer_page():
-    st.header("👨‍💼 Interviewer Dashboard")
+    st.header("Interviewer Dashboard")
     
     if "logged_in" not in st.session_state or not st.session_state.logged_in:
         tenant_list = list(passwords.keys())
@@ -384,15 +382,15 @@ def render_interviewer_page():
                             st.rerun()
                 
                 with col2:
-                    st.subheader("📊 Word Cloud Insights")
+                    st.subheader("Word Cloud Insights")
                     render_wordcloud(c_details.get("cleaned_text", ""))
                     
                     st.divider()
-                    st.subheader("🔍 Structured Insights")
+                    st.subheader("Structured Insights")
                     structured_info = extract_structured_info(c_details.get("cleaned_text", ""))
                     if structured_info:
                         for section, content in structured_info.items():
-                            with st.expander(f"📌 {section}", expanded=(section in ["Skills", "Projects"])):
+                            with st.expander(f" {section}", expanded=(section in ["Skills", "Projects"])):
                                 st.write(content.capitalize())
                     else:
                         st.info("No structured information could be extracted.")
@@ -402,7 +400,7 @@ def render_interviewer_page():
             st.error(f"Error: {e}")
 
 def render_candidate_page():
-    st.header("🧑 Candidate Tracking")
+    st.header("Candidate Tracking")
     tracking_id = st.text_input("Enter Tracking ID")
     
     if st.button("Track Status"):
@@ -425,10 +423,10 @@ def render_candidate_page():
                 col3.metric("Final", res['final_status'].capitalize())
                 
                 if res['interview_time']:
-                    st.info(f"📅 Interview Scheduled: {res['interview_time']}")
+                    st.info(f" Interview Scheduled: {res['interview_time']}")
                 
-                if res['final_status'] == "selected": st.success("🎉 Congratulations! You are selected.")
-                elif res['final_status'] == "rejected": st.error("❌ Sorry, you were not selected.")
+                if res['final_status'] == "selected": st.success(" Congratulations! You are selected.")
+                elif res['final_status'] == "rejected": st.error(" Sorry, you were not selected.")
                 
             except Exception:
                 st.error("Candidate not found.")
@@ -438,7 +436,7 @@ def main():
     ensure_nltk_resource("corpora/stopwords", "stopwords")
     ensure_nltk_resource("tokenizers/punkt", "punkt")
 
-    st.title("🚀 Privacy-Aware AI Resume Screening")
+    st.title(" Privacy-Aware AI Resume Screening")
     
     try:
         tenants_payload = get_backend_data("/tenants")
@@ -447,7 +445,7 @@ def main():
         st.error(f"Backend not reachable at {BACKEND_URL}.")
         st.stop()
 
-    tabs = st.tabs(["📂 Recruiter", "👨‍💼 Interviewer", "🧑 Candidate"])
+    tabs = st.tabs([" Recruiter", " Interviewer", " Candidate"])
     with tabs[0]: render_resume_page(tenants)
     with tabs[1]: render_interviewer_page()
     with tabs[2]: render_candidate_page()
