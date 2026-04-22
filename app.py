@@ -23,7 +23,7 @@ def ensure_nltk_resource(resource_path, resource_name):
     except LookupError:
         nltk.download(resource_name, quiet=True)
 
-# ---------------- PASSWORDS (HARDCODED FOR ORIGINALITY) ----------------
+# ---------------- PASSWORDS  ----------------
 passwords = {
     "Tech Solutions Pvt Ltd": {"Aravind – Backend Team": "aravind1234", "Ishaan – Frontend Team": "ishaan1234", "Advait – DevOps Team": "advait1234"},
     "Data & Analytics Corp": {"Vihaan – Data Engineering": "vihaan1234", "Ananya – Analytics": "ananya1234", "Pranav – Program Management": "pranav1234"},
@@ -42,7 +42,7 @@ def remove_pii(text):
     text = re.sub(r"https?://\S+", " ", text)
     text = re.sub(r"linkedin\.com/\S+", " ", text)
     
-    # Mask common location keywords (e.g., Odisha, India)
+    # Mask common location keywords 
     locations = ["odisha", "india", "bhubaneswar", "bangalore", "hyderabad", "pune", "mumbai", "delhi"]
     for loc in locations:
         text = re.sub(rf"\b{loc}\b", " ", text, flags=re.IGNORECASE)
@@ -53,8 +53,6 @@ def remove_pii(text):
         text = re.sub(rf"\b{label}\b", " ", text, flags=re.IGNORECASE)
 
     # Name removal heuristic: 
-    # Usually the name is at the top. We've already anonymized the storage, 
-    # but for the word cloud/clean text, we'll strip the first line if it looks like a name header
     lines = text.split('\n')
     if lines and len(lines[0].split()) < 5: # Heuristic for a name header
         lines[0] = " "
@@ -447,7 +445,7 @@ def main():
         st.error(f"Backend not reachable at {BACKEND_URL}.")
         st.stop()
 
-    tabs = st.tabs(["📂 Recruiter", "👨‍💼 Interviewer", "🧑 Candidate"])
+    tabs = st.tabs(["Recruiter", "Interviewer", "Candidate"])
     with tabs[0]: render_resume_page(tenants)
     with tabs[1]: render_interviewer_page()
     with tabs[2]: render_candidate_page()
